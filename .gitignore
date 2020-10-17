@@ -9,8 +9,10 @@
 # Ignore notebooks and output from notebooks
 notebooks/test.ipynb
 notebooks/ESE156_02_SpectralDOASFits.ipynb.backup2
-notebooks/*.gif
-notebooks/*.png
+*.gif
+*.png
+*.dat
+*.pdf
 
 # Ignore homework files, but leave placeholder
 homework/*
