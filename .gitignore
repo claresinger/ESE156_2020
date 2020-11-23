@@ -16,5 +16,4 @@ notebooks/ESE156_02_SpectralDOASFits.ipynb.backup2
 
 # Ignore homework files, but leave placeholder
 homework/*
-scripts/TimerTest.pdf
-scripts/timerTest.dat
+EO1_Hyperion_data/
