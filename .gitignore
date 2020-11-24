@@ -5,6 +5,7 @@
 # Ignore large data files
 *files/
 *files.zip
+EO1_Hyperion_data/
 
 # Ignore notebooks and output from notebooks
 notebooks/test.ipynb
@@ -13,7 +14,8 @@ notebooks/ESE156_02_SpectralDOASFits.ipynb.backup2
 *.png
 *.dat
 *.pdf
+*.jld2
 
 # Ignore homework files, but leave placeholder
 homework/*
-EO1_Hyperion_data/
+final_project/*
