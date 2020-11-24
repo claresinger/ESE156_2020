@@ -14,6 +14,7 @@ notebooks/ESE156_02_SpectralDOASFits.ipynb.backup2
 *.png
 *.dat
 *.pdf
+*.jld2
 
 # Ignore homework files, but leave placeholder
 homework/*
