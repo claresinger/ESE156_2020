@@ -52,8 +52,6 @@ function read_atmos_profile(file::String, lat::Real, lon::Real, timeIndex; g₀=
     # Find index (nearest neighbor, one could envision interpolation in space and time!):
     iLat = argmin(abs.(lat_ .- lat))
     iLon = argmin(abs.(lon_ .- lon))
-    
-    println(iLon)
 
     # Temperature profile
     T    = convert(Array{FT,1}, ds["T"][iLon, iLat, :, timeIndex])
