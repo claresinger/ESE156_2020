@@ -86,9 +86,9 @@ function plot_cross_sections(ν, k1, hyp_wl, k2, k3)
     k1_conv = conv_spectra(hyp, ν, k1);
     coarse_wl = 1e4 ./ ν_coarse;
 
-    p = plot(coarse_wl, k1_conv * 1e19, color=:blue, yscale=:log10, figsize=(400,400))
-    plot!(hyp_wl, k2, color=:green, lw=2)
-    plot!(hyp_wl, k3, color=:red, lw=2)
+    p = plot(coarse_wl, k1_conv * 1e19, color=:blue, yscale=:log10, figsize=(400,400), label="water vapor")
+    plot!(hyp_wl, k2, color=:green, lw=2, label="liquid")
+    plot!(hyp_wl, k3, color=:red, lw=2, label="ice")
     xlabel!("wavelength (um)")
     ylabel!("absorption cross-section (cm-1)")
     savefig(p, "cross_sections.png")
