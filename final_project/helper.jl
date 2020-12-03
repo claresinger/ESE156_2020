@@ -94,9 +94,3 @@ function plot_cross_sections(ν, k1, hyp_wl, k2, k3)
     savefig(p, "cross_sections.png")
     display(p)
 end
-
-function fwd_model(x; λ=hyp_wl, k1=k1, k2=k2, k3=k3)
-    l, m, u1, u2, u3 = x;
-    ρ = (l .+ λ*m) .* exp.( -1 .* (k1*u1 .+ k2*u2 .+ k3*u3));
-    return ρ
-end
