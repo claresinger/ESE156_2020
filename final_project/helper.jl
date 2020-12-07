@@ -91,6 +91,30 @@ function plot_cross_sections(ν, k1, hyp_wl, k2, k3)
     plot!(hyp_wl, k3, color=:red, lw=2, label="ice")
     xlabel!("wavelength (um)")
     ylabel!("absorption cross-section (cm-1)")
-    savefig(p, "cross_sections.png")
+    savefig(p, "./figures/cross_sections.png")
+    display(p)
+end
+
+function plot_radiances(hyp_wl, rad)
+    pts = [(5,10),(40,500),(80,1000),(120,1500),(160,2000),(200,2500),(240,3000)]
+
+    s = 20
+    rad_s = rad[:,s,:]'
+    p1 = heatmap(rad_s, clims=(0,1500), size=(400,500), title=@sprintf("radiance at %.3f (um)", hyp_wl[s]))
+    scatter!(pts, color=1, label="")
+    xlims!(0,256)
+    ylims!(0,3189)
+
+    p2 = plot()
+    for (i,j) in pts
+        plot!(hyp_wl,rad[i,:,j], label="("*string(i)*", "*string(j)*")")
+    end
+
+    xlims!(1.4,1.8)
+    ylims!(0,1000)
+    xlabel!("wavelength (um)")
+    ylabel!("radiance (W/m2/sr/um)")
+    p = plot(p1,p2,layout=(1,2),size=(800,500))
+    savefig(p, "./figures/snapshot_data.png")
     display(p)
 end
