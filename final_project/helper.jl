@@ -2,6 +2,9 @@ using DelimitedFiles
 using NCDatasets
 using Interpolations
 using JLD2
+using LinearAlgebra
+using Plots
+using Printf
 include("../scripts/ese156_tools.jl")
 
 function read_Hyperion()
@@ -9,6 +12,7 @@ function read_Hyperion()
     file = "../EO1_Hyperion_data/"*entity_id*"/"*entity_id*".AUX";
     ds = Dataset(file);
     wl = ds["Spectral Center Wavelengths"][:];
+    gain = ds["Gain Coefficients"][:];
     wl = mean(wl, dims=1)[1,:] * 1e-3;
 
     file = "../EO1_Hyperion_data/"*entity_id*"/"*entity_id*".L1R";
@@ -19,9 +23,10 @@ function read_Hyperion()
 
     wlrange = findall(x -> x > 1.4 && x < 1.8, wl);
     rad = rad[:,wlrange,:];
+    gain = gain[:,wlrange];
     wl = wl[wlrange];
     
-    return wl, rad
+    return wl, rad, gain
 end
 
 function read_Kuo_abs(hyp_wl)
@@ -116,5 +121,122 @@ function plot_radiances(hyp_wl, rad)
     ylabel!("radiance (W/m2/sr/um)")
     p = plot(p1,p2,layout=(1,2),size=(800,500))
     savefig(p, "./figures/snapshot_data.png")
+    display(p)
+end
+
+function read_solar()
+    ds = readdlm("solar-visie.tsv",'\t',skipstart=35)
+    wl_hr = ds[:,1];
+    solar_hr = ds[:,2] .* 1e3;
+    hyp = KernelInstrument(gaussian_kernel(0.001, 0.005), hyp_wl .* 1e3);
+    Fsolar = conv_spectra(hyp, wl_hr[1]:wl_hr[2]-wl_hr[1]:wl_hr[end], solar_hr);
+    wl_hr /= 1e3;
+
+    p=plot(wl_hr, solar_hr);
+    plot!(hyp_wl, Fsolar);
+    xlabel!("wavelength (um)");
+    ylabel!("solar irradiance (W/m2/um)");
+    
+    return Fsolar
+end
+
+function fwd_model(x; instrument=hyp, λ=hyp_wl, ν_hr=ν_hr, k1_hr=k1_hr, k2=k2, k3=k3)
+    l, m, u1, u2, u3 = x;
+    T0 = exp.(l .+ λ*m);
+    T1_hr = exp.(-k1_hr*u1);
+    T1_conv = conv_spectra(instrument, ν_hr, T1_hr);
+    T23 = exp.(-k2*u2 .- k3*u3);
+    ρ = T0 .* T1_conv .* T23;
+    return ρ
+end
+
+function run_fit(y; λ=hyp_wl, k1=k1, k2=k2, k3=k3)
+    K = [ones(length(λ)) λ -k1 -k2 -k3];
+    
+    # Construct error covariance matrix
+    noise = 1/100;
+    Se = Diagonal((ones(length(λ)).*noise).^2);
+    
+    # Solve normal equations:
+    x̂ = inv(K'inv(Se)K) * K'inv(Se) * log.(y);
+    
+    return x̂
+end
+
+function chi_by_eye(hyp_wl, rad, gain, cosθ, Fsolar)
+    (i,j) = (120,500);
+    ρ = rad[i,:,j] .* gain[i,:] .* π ./ cosθ ./ Fsolar;
+    p = plot(hyp_wl, ρ, color=:purple, label="("*string(i)*", "*string(j)*")");
+    x̂ = [-1.4, 0.25, 5e15, 0.014, 0.009];
+    plot!(hyp_wl, fwd_model(x̂), color=:purple, lw=2, label="mixed-phase", legend=:topleft);
+    
+    (i,j) = (240,3000);
+    ρ = rad[i,:,j] .* gain[i,:] .* π ./ cosθ ./ Fsolar;
+    plot!(hyp_wl, ρ, color=:green, label="("*string(i)*", "*string(j)*")");
+    x̂ = [-1.9, 0.1, 7e15, 0.02, 0.004];
+    plot!(hyp_wl, fwd_model(x̂), color=:green, lw=2, label="mostly liquid");
+
+    (i,j) = (245,400);
+    ρ = rad[i,:,j] .* gain[i,:] .* π ./ cosθ ./ Fsolar;
+    p = plot!(hyp_wl, ρ, color=:red, label="("*string(i)*", "*string(j)*")");
+    x̂ = [-2.3, 0.7, 5e15, 0.002, 0.014];
+    plot!(hyp_wl, fwd_model(x̂), color=:red, lw=2, label="mostly ice");
+    
+    xlims!(1.4,1.8)
+    xlabel!("wavelength (um)")
+    ylabel!("TOA reflectance")
+    savefig(p, "./figures/chi-by-eye.png")
+    display(p)
+end
+
+function rho_fit(hyp_wl, rad, gain, cosθ, Fsolar)
+    (i,j) = (40,500);
+    y = rad[i,:,j] .* gain[i,:] .* π ./ cosθ ./ Fsolar;
+    x̂ = run_fit(y);
+    LTF = x̂[4] / (x̂[4] + x̂[5]);
+
+    p1 = plot(hyp_wl, y, label="measured", legend=:bottomright);
+    plot!(hyp_wl, fwd_model(x̂), label="modeled");
+    ylabel!("TOA reflectance");
+    ylims!(0,0.3)
+    title!(@sprintf("LTF=%.2f",LTF))
+
+    instrument = KernelInstrument(gaussian_kernel(10, 0.005), 1e4 ./ hyp_wl);
+    Tvapor_hr = exp.(-k1_hr*x̂[3]);
+    Tvapor_conv = conv_spectra(instrument, ν_hr, Tvapor_hr);
+    p3 = plot(hyp_wl, Tvapor_conv, color=:blue, label="water vapor", legend=:bottomright);
+    plot!(hyp_wl, exp.(-x̂[4]*k2), color=:green, label="liquid");
+    plot!(hyp_wl, exp.(-x̂[5]*k3), color=:red, label="ice");
+    ylabel!("transmittance")
+    ylims!(0,1)
+
+    p5 = plot(hyp_wl, fwd_model(x̂) - y, color=2, label="");
+    plot!(hyp_wl, zeros(length(hyp_wl)), color=:black, label="");
+    xlabel!("wavelength (um)");
+    ylabel!("residual");
+    ylims!(-0.1,0.1)
+
+    (i,j) = (240,3000);
+    y = rad[i,:,j] .* gain[i,:] .* π ./ cosθ ./ Fsolar;
+    x̂ = run_fit(y);
+    LTF = x̂[4] / (x̂[4] + x̂[5]);
+
+    p2 = plot(hyp_wl, y, label="");
+    plot!(hyp_wl, fwd_model(x̂), label="");
+    ylims!(0,0.3)
+    title!(@sprintf("LTF=%.2f",LTF))
+
+    p4 = plot(hyp_wl, exp.(-x̂[3]*k1), color=:blue, label="");
+    plot!(hyp_wl, exp.(-x̂[4]*k2), color=:green, label="");
+    plot!(hyp_wl, exp.(-x̂[5]*k3), color=:red, label="");
+    ylims!(0,1)
+
+    p6 = plot(hyp_wl, fwd_model(x̂) - y, color=2, label="");
+    plot!(hyp_wl, zeros(length(hyp_wl)), color=:black, label="");
+    xlabel!("wavelength (um)");
+    ylims!(-0.1,0.1)
+
+    p = plot(p1,p2,p3,p4,p5,p6,layout=(3,2),size=(700,500))
+    savefig(p, "./figures/rho_transmittance_residual.png")
     display(p)
 end
